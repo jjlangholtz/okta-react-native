@@ -52,6 +52,63 @@ extension OktaOidcStateManager: StateManagerProtocol {
     
 }
 
+// MARK: - DeviceSecretProtocol
+
+class DeviceSecretKeychain {
+    var key: String
+    var group: String
+
+    init(key: String, group: String) {
+        self.key = key
+        self.group = group
+    }
+
+    func get() -> (idToken: String?, deviceSecret: String?) {
+        let query: [String: Any] = [
+            (kSecClass as String): kSecClassGenericPassword,   // only Password items can use iCloud keychain
+            (kSecAttrSynchronizable as String): kCFBooleanTrue!,  // allow iCloud
+            (kSecAttrLabel as String): self.key,       // tag to make it easy to search
+            (kSecAttrAccessGroup as String): self.group,   // multiple apps can share through this group
+            (kSecMatchLimit as String): kSecMatchLimitOne,    // should only have one key
+            (kSecReturnAttributes as String): true,
+            (kSecReturnData as String): true]
+        var item: CFTypeRef?
+
+        SecItemCopyMatching(query as CFDictionary, &item)
+
+        if let existingItem = item as? [String: Any],
+            let idToken = existingItem[kSecAttrAccount as String] as? String,
+            let deviceSecretData = existingItem[kSecValueData as String] as? Data {
+            let deviceSecret = String(data: deviceSecretData, encoding: .utf8)
+            return (idToken, deviceSecret)
+        }
+        return (nil, nil)
+    }
+
+    func set(idToken: String, deviceSecret: String) {
+        let attributes: [String: Any] = [
+            (kSecClass as String): kSecClassGenericPassword,    // only Password items can use iCloud keychain
+            (kSecAttrSynchronizable as String): kCFBooleanTrue!,  // allow iCloud
+            (kSecAttrLabel as String): self.key,        // tag to make it easy to search
+            (kSecAttrAccessGroup as String): self.group,   // multiple apps can share through this group
+            (kSecAttrAccount as String): idToken,
+            (kSecValueData as String): deviceSecret.data(using: .utf8)!
+        ]
+
+        SecItemAdd(attributes as CFDictionary, nil)
+    }
+
+    func remove() {
+        let query: [String: Any] = [
+            (kSecClass as String): kSecClassGenericPassword,  // only Password items can use iCloud keychain
+            (kSecAttrSynchronizable as String): kCFBooleanTrue!,  // allow iCloud
+            (kSecAttrAccessGroup as String): self.group,   // multiple apps can share through this group
+            (kSecAttrLabel as String): self.key]      // tag to make it easy to search
+
+        SecItemDelete(query as CFDictionary)
+    }
+}
+
 // MARK: - OktaSdkBridge
 
 @objc(OktaSdkBridge)
@@ -70,6 +127,7 @@ class OktaSdkBridge: RCTEventEmitter {
     }
     
     var oktaOidc: OktaOidcProtocol?
+    var deviceSecretKeychain: DeviceSecretKeychain?
     
     override var methodQueue: DispatchQueue { .main }
     
@@ -85,6 +143,8 @@ class OktaSdkBridge: RCTEventEmitter {
                       endSessionRedirectUri: String,
                       discoveryUri: String,
                       scopes: String,
+                      keychainGroup: String = "",
+                      keychainTag: String = "",
                       userAgentTemplate: String,
                       requestTimeout: Int,
                       promiseResolver: RCTPromiseResolveBlock,
@@ -106,6 +166,10 @@ class OktaSdkBridge: RCTEventEmitter {
             oktaOidc = try OktaOidc(configuration: config)
             self.requestTimeout = requestTimeout
             
+            if !keychainTag.isEmpty && !keychainGroup.isEmpty {
+                self.deviceSecretKeychain = DeviceSecretKeychain(key: keychainTag, group: keychainGroup)
+            }
+
             promiseResolver(true)
         } catch let error {
             promiseRejecter(OktaReactNativeError.oktaOidcError.errorCode, error.localizedDescription, error)
@@ -311,6 +375,15 @@ class OktaSdkBridge: RCTEventEmitter {
             }
             
             currStateManager.writeToSecureStorage()
+
+            if let keychain = self.deviceSecretKeychain {
+                keychain.remove()
+                keychain.set(
+                    idToken: currStateManager.idToken!,
+                    deviceSecret: currStateManager.authState.lastTokenResponse!.additionalParameters!["device_secret"]! as! String
+                )
+            }
+
             let dic = [
                 OktaSdkConstant.RESOLVE_TYPE_KEY: OktaSdkConstant.AUTHORIZED,
                 OktaSdkConstant.ACCESS_TOKEN_KEY: stateManager?.accessToken
@@ -318,6 +391,82 @@ class OktaSdkBridge: RCTEventEmitter {
             
             self.sendEvent(withName: OktaSdkConstant.SIGN_IN_SUCCESS, body: dic)
             promiseResolver(dic)
+        }
+    }
+
+    @objc
+    func signInWithDeviceSecret(_ promiseResolver: @escaping RCTPromiseResolveBlock, promiseRejecter: @escaping RCTPromiseRejectBlock) {
+        // we are here when we are not logged in
+        // first try to find device_secret and exchange a token
+
+        if self.deviceSecretKeychain == nil {
+            let error = OktaReactNativeError.unauthenticated
+            promiseRejecter(error.errorCode, error.errorDescription, error)
+            return
+        }
+
+        let (idToken, deviceSecret) = self.deviceSecretKeychain!.get()
+
+        if idToken == nil {
+            let error = OktaReactNativeError.unauthenticated
+            promiseRejecter(error.errorCode, error.errorDescription, error)
+            return
+        }
+
+        // try exchange for token
+        let requestConfiguration = OKTServiceConfiguration.init(
+            authorizationEndpoint: URL(string: config!.issuer + "/v1/authorize")!,
+            tokenEndpoint: URL(string: config!.issuer + "/v1/token")!
+        )
+
+        let request = OKTTokenRequest(configuration: requestConfiguration,
+                                      grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+                                      authorizationCode: nil,
+                                      redirectURL: nil,
+                                      clientID: config!.clientId,
+                                      clientSecret: nil,
+                                      scope: "openid offline_access",
+                                      refreshToken: nil,
+                                      codeVerifier: nil,
+                                      additionalParameters: ["actor_token" : deviceSecret!,
+                                                             "actor_token_type" : "urn:x-oath:params:oauth:token-type:device-secret",
+                                                             "subject_token" : idToken!,
+                                                             "subject_token_type" : "urn:ietf:params:oauth:token-type:id_token",
+                                                             "audience" : "api://default"])
+
+        // perform token exchange
+        OKTAuthorizationService.perform(request, delegate: nil) { tokenResponse, error in
+            if error != nil {
+              promiseRejecter(error.debugDescription, error.debugDescription, error)
+              return
+            }
+
+            // successfully exchanged token, try to save
+            // construct AuthState from a fake request, because we did not make a real OIDC request to begin with
+            let authState = OKTAuthState(authorizationResponse:
+                                         OKTAuthorizationResponse(request:
+                                                                    OKTAuthorizationRequest(configuration: requestConfiguration,
+                                                                                            clientId: self.config!.clientId,
+                                                                                            scopes: ["openid"],
+                                                                                            redirectURL: URL(string: "any")!,
+                                                                                            responseType: "code",
+                                                                                            additionalParameters: nil),
+                                                                                    parameters: ["any": "any" as NSString]))
+
+            // tokenResponse has the real tokens that we need to save
+            authState.update(with: tokenResponse, error: error)
+            
+            let stateManager = OktaOidcStateManager(authState: authState)
+            // Store instance of stateManager into the local iOS keychain
+            stateManager.writeToSecureStorage()
+
+            let result = [
+                OktaSdkConstant.RESOLVE_TYPE_KEY: OktaSdkConstant.AUTHORIZED,
+                OktaSdkConstant.ACCESS_TOKEN_KEY: stateManager.accessToken
+            ]
+
+            self.sendEvent(withName: OktaSdkConstant.SIGN_IN_SUCCESS, body: result)
+            promiseResolver(result)
         }
     }
     

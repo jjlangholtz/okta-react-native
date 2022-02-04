@@ -23,6 +23,8 @@ expectType<Promise<boolean>>(OktaSDK.createConfig({
   endSessionRedirectUri: '{endSessionRedirectUri}',
   discoveryUri: '{discoveryUri}',
   scopes: ['scope1', 'scope2'],
+  keychainGroup: 'com.example.SharedItems',
+  keychainTag: 'device_secret',
   requireHardwareBackedKeyStore: false,
   androidChromeTabColor: '#00000',
   httpConnectionTimeout: 15,

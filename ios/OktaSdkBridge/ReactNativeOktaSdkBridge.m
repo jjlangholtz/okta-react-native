@@ -33,6 +33,8 @@ RCT_EXTERN_METHOD(
   promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter
 )
 
+RCT_EXTERN_METHOD(signInWithDeviceSecret:(RCTPromiseResolveBlock *)promiseResolver promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter)
+
 RCT_EXTERN_METHOD(
   authenticate:
   (NSString *)sessionToken

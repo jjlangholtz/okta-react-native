@@ -14,23 +14,25 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable camelcase */
-import { OktaAuthOptions, OktaAuth  } from '@okta/okta-auth-js';
+import { OktaAuthOptions, OktaAuth } from '@okta/okta-auth-js';
 
 export function createConfig(config: Okta.ConfigParameters): Promise<boolean>;
 
 export function getAuthClient(): OktaAuth;
 
-export function signIn(
-  credentials?: Okta.Credentials
-): Promise<Okta.AuthenticationResponse>;
+export function signIn(credentials?: Okta.Credentials): Promise<Okta.AuthenticationResponse>;
+
+export function signInWithDeviceSecret(): Promise<Okta.AuthenticationResponse>;
 
 export function signInWithBrowser(
-  options?: Okta.BrowserOptions
+  options?: Okta.BrowserOptions,
 ): Promise<Okta.AuthenticationResponse>;
 
-export function authenticate(
-  { sessionToken }: { sessionToken: string } 
-): Promise<Okta.AuthenticationResponse>;
+export function authenticate({
+  sessionToken,
+}: {
+  sessionToken: string;
+}): Promise<Okta.AuthenticationResponse>;
 
 export function signOut(): Promise<{ resolve_type: string }>;
 
@@ -63,6 +65,8 @@ export namespace Okta {
     endSessionRedirectUri: string;
     discoveryUri: string;
     scopes: string[];
+    keychainGroup?: string;
+    keychainTag?: string;
     requireHardwareBackedKeyStore: boolean;
     androidChromeTabColor?: string;
     httpConnectionTimeout?: number;

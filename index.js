@@ -61,6 +61,8 @@ export const createConfig = async({
   endSessionRedirectUri, 
   discoveryUri,
   scopes,
+  keychainGroup,
+  keychainTag = 'device_secret',
   requireHardwareBackedKeyStore,
   androidChromeTabColor,
   httpConnectionTimeout,
@@ -88,12 +90,12 @@ export const createConfig = async({
     redirectUri,
     scopes
   };
-  
+
   authClient = new OktaAuth(oktaAuthConfig);
 
   const reactNativeVersion = peerDependencies['react-native'];
   const userAgentTemplate = `okta-react-native/${version} $UPSTREAM_SDK react-native/${reactNativeVersion} ${Platform.OS}/${Platform.Version}`;
-  
+
   if (authClient._oktaUserAgent) {
     authClient._oktaUserAgent.addEnvironment(userAgentTemplate.replace('$UPSTREAM_SDK ', ''));
   }
@@ -110,6 +112,8 @@ export const createConfig = async({
       endSessionRedirectUri,
       discoveryUri,
       scopes,
+      keychainGroup,
+      keychainTag,
       userAgentTemplate,
       httpConnectionTimeout,
     );
@@ -119,7 +123,7 @@ export const createConfig = async({
     httpConnectionTimeout,
     httpReadTimeout,
   };
-    
+
   return NativeModules.OktaSdkBridge.createConfig(
     clientId,
     redirectUri,
@@ -181,6 +185,10 @@ export const signInWithBrowser = async(options = {}) => {
   }
 
   return NativeModules.OktaSdkBridge.signIn(options);
+};
+
+export const signInWithDeviceSecret = async() => {
+  return NativeModules.OktaSdkBridge.signInWithDeviceSecret();
 };
 
 export const signOut = async() => {
