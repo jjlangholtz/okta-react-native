@@ -53,6 +53,8 @@ RCT_EXTERN_METHOD(getIdToken:(RCTPromiseResolveBlock *)promiseResolver promiseRe
 
 RCT_EXTERN_METHOD(getUser:(RCTPromiseResolveBlock *)promiseResolver promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter)
 
+RCT_EXTERN_METHOD(getNativeSSOCredentials:(RCTPromiseResolveBlock *)promiseResolver promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter)
+
 RCT_EXTERN_METHOD(isAuthenticated:(RCTPromiseResolveBlock *)promiseResolver promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter)
 
 RCT_EXTERN_METHOD(revokeAccessToken:(RCTPromiseResolveBlock *)promiseResolver promiseRejecter:(RCTPromiseRejectBlock *)promiseRejecter)

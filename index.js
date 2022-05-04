@@ -207,6 +207,10 @@ export const getIdToken = async() => {
   return NativeModules.OktaSdkBridge.getIdToken();
 };
 
+export const getNativeSSOCredentials = async() => {
+  return NativeModules.OktaSdkBridge.getNativeSSOCredentials();
+};
+
 export const getUser = async() => {
   return NativeModules.OktaSdkBridge.getUser()
     .then(data => {

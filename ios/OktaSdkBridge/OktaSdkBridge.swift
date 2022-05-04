@@ -530,6 +530,23 @@ class OktaSdkBridge: RCTEventEmitter {
             promiseResolver(response)
         }
     }
+
+    @objc
+    func getNativeSSOCredentials(promiseResolver: @escaping RCTPromiseResolveBlock, promiseRejecter: @escaping RCTPromiseRejectBlock) {
+        if self.deviceSecretKeychain == nil {
+            let error = OktaReactNativeError.unauthenticated
+            promiseRejecter(error.errorCode, error.errorDescription, error)
+            return
+        }
+
+        let (idToken, deviceSecret) = self.deviceSecretKeychain!.get()
+        let credentials = [
+            "id_token": idToken,
+            "device_secret": deviceSecret
+        ]
+
+        promiseResolver(credentials)
+    }
     
     @objc(isAuthenticated:promiseRejecter:)
     func isAuthenticated(promiseResolver: @escaping RCTPromiseResolveBlock, promiseRejecter: @escaping RCTPromiseRejectBlock) {
